@@ -144,7 +144,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       #      password:
       #      使用drone后台设置的值需带from_secret
       #        from_secret: TestSSHKey
-      password:
+      password: qwerASDF...
       #     key登入写法(两种选一个)
       key:
         from_secret: sfdsg234dgdfb567
