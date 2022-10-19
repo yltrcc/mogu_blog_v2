@@ -1,0 +1,182 @@
+kind: pipeline # 定义对象类型，还有secret和signature两种类型
+type: docker # 定义流水线类型，还有kubernetes、exec、ssh等类型
+name: drone-study # 定义流水线名称
+
+platform:
+#  os: linux
+#  arch: arm64
+
+steps: # 定义流水线执行步骤，这些步骤将顺序执行
+  - name: build-package # 流水线名称
+    image: maven:3.8.5-openjdk-8 # 定义创建容器的Docker镜像
+    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+      - name: maven-cache
+        path: /root/.m2 # 将maven下载依赖的目录挂载出来，防止重复下载
+      - name: maven-build
+        path: /usr/gitea/blogs/docker-compose # 将应用打包好的Jar和执行脚本挂载出来
+    commands: # 定义在Docker容器中执行的shell命令
+      #      - cd /usr/gitea/blogs/mogu_blog_v2
+      - mvn clean package -DskipTests=true # 应用打包命令
+      - rm -rf /usr/gitea/blogs/docker-compose/*
+      - cp /drone/src/**/target/*.jar /usr/gitea/blogs/docker-compose
+      - cp /drone/src/**/target/classes/*.Dockerfile /usr/gitea/blogs/docker-compose
+      - cp /drone/src/docker-compose.yml /usr/gitea/blogs/docker-compose
+      #      - cp /drone/src/rm.sh /usr/gitea/blogs/docker-compose
+      - cp /drone/src/update.sh /usr/gitea/blogs/docker-compose
+      - cd /usr/gitea/blogs/docker-compose
+  - name: restore-cache #缓存加快打包速度
+    image: drillster/drone-volume-cache
+    settings:
+      restore: true #会将文件从主机复制到容器
+      mount: #mount 列出需要缓存的文件夹
+        - ./.npm-cache
+        - /drone/src/vue_mogu_web/node_modules
+        - /drone/src/vue_mogu_admin/node_modules
+    volumes:
+      - name: cache
+        path: /cache
+  #  - name: restore-cache #缓存加快打包速度
+  #    image: superpoa/drone-volume-cache
+  #    settings:
+  #      restore: true #会将文件从主机复制到容器
+  #       mount: #mount 列出需要缓存的文件夹
+  #        - ./.npm-cache
+  #        - ./node_modules
+  #    volumes:
+  #      - name: cache
+  #        path: /cache
+  - name: npm-install
+    image: node:14.18
+    commands:
+      - ls
+      - cd vue_mogu_web/
+      - rm package-lock.json
+      - ls
+      #      - npm install --no-optional --verbose
+      #      - ls
+      #      - npm  i
+      - npm config set cache ./.npm-cache --global
+      - npm install
+  - name: admin-npm-install
+    image: node:14.18
+    commands:
+      - cd vue_mogu_admin/
+      #      - rm package-lock.json
+      - npm config set cache ./.npm-cache --global
+      - npm install
+  - name: wab-npm-build-dist
+    image: node:14.18
+    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+      - name: wab-npm-build-dist
+        path: /usr/gitea/blogs/docker-compose/dist/web # 将应用打包好的Jar和执行脚本挂载出来
+    commands:
+      - cd vue_mogu_web/
+      - npm run build
+      - cd /drone/src/vue_mogu_web/
+      - ls
+      - cp -r /drone/src/vue_mogu_web/dist/* /usr/gitea/blogs/docker-compose/dist/web
+  - name: admin-npm-build-dist
+    image: node:14.18
+    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+      - name: admin-npm-build-dist
+        path: /usr/gitea/blogs/docker-compose/dist/admin # 将应用打包好的Jar和执行脚本挂载出来
+    commands:
+      - cd vue_mogu_admin/
+      - npm run build
+      - cd /drone/src/vue_mogu_admin/
+      - ls
+      - cp -r /drone/src/vue_mogu_admin/dist/* /usr/gitea/blogs/docker-compose/dist/admin
+  - name: rebuild-cache
+    image: drillster/drone-volume-cache
+    settings:
+      rebuild: true #会将文件从容器复制到主机
+      mount:
+        - ./.npm-cache
+        - /drone/src/vue_mogu_web/node_modules
+    volumes:
+      - name: cache
+        path: /cache
+  - name: admin-rebuild-cache
+    image: drillster/drone-volume-cache
+    settings:
+      rebuild: true #会将文件从容器复制到主机
+      mount:
+        - ./.npm-cache
+        - /drone/src/vue_mogu_admin/node_modules
+    volumes:
+      - name: cache
+        path: /cache
+  #  - name: npm-install
+  #    image: node:18.7-alpine
+  #    commands:
+  #      - cd vue_mogu_web/
+  #      - npm config set cache ./.npm-cache --global
+  #      - npm install
+  #  - name: build-dist
+  #    image: node:18.7-alpine
+  #    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+  #      - name: maven-build
+  #        path: /usr/gitea/blogs/docker-compose # 将应用打包好的Jar和执行脚本挂载出来
+  #    commands:
+  #      - cd vue_mogu_web/
+  #      - rm -rf /node_modules/
+  #      - ls
+  #      - npm config set cache ./.npm-cache --global
+  #      - npm install
+  #      - ls
+  #      - npm run build
+  #      - ls
+  #      - cd ..
+  #      - cd vue_mogu_admin/
+  #      - npm config set cache ./.npm-cache --global
+  #      - npm install
+  #      - ls
+  #      - npm run build
+  #      - ls
+  - name: ssh
+    image: appleboy/drone-ssh
+    settings:
+      #      你服务器ip地址
+      host: 129.28.156.166
+      #      服务器账号
+      username: root
+      #      密码登入写法(两种选一个)
+      #      password:
+      #      使用drone后台设置的值需带from_secret
+      #        from_secret: TestSSHKey
+      password:
+      #     key登入写法(两种选一个)
+      key:
+        from_secret: sfdsg234dgdfb567
+      port: 22
+      script:
+        - cd /www/wwwroot/data/maven/build/drone-study
+        - ls
+        - sudo mkdir -p  /usr/gitea/blogs/docker-compose
+        - sudo chmod +x  /usr/gitea/blogs/docker-compose
+        - sudo cp /www/wwwroot/data/maven/build/drone-study/*.jar /usr/gitea/blogs/docker-compose
+        - sudo cp /www/wwwroot/data/maven/build/drone-study/docker-compose.yml /usr/gitea/blogs/docker-compose
+        - cd /usr/gitea/blogs/docker-compose
+        #        这里注意第一次运行需要执行以下两天命令，这条命令是构建镜像的，第二次就不需要了
+        - chmod +x update.sh
+        - ./update.sh
+        #        这两条命令是启动项目的命令
+        - sudo docker-compose down
+        - sudo docker-compose up -d
+volumes: # 定义流水线挂载目录，用于共享数据
+  - name: maven-build
+    host:
+      path: /www/wwwroot/data/maven/build/drone-study #jar包目录可以修改从宿主机中挂载的目录
+  - name: maven-cache
+    host:
+      path: /www/wwwroot/data/maven/cache
+
+  - name: wab-npm-build-dist
+    host:
+      path: /www/wwwroot/data/maven/build/drone-study/dist/wab # 前端wab的dist目录地址,可以修改从宿主机中挂载的目录
+  - name: cache
+    host:
+      path: /www/wwwroot/data/node/node_modules
+  - name: admin-npm-build-dist
+    host:
+      path: /www/wwwroot/data/maven/build/drone-study/dist/admin #  前端admin的dist目录地址,可以修改从宿主机中挂载的目录

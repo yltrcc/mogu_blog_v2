@@ -1,0 +1,44 @@
+version: '3.1'           #固定格式，表示docker-compose的版本号
+services:                #固定格式，所有服务的入口
+  mogu_gateway:
+    image: mogu_gateway:latest
+    container_name: mogu_gateway
+    restart: always
+    #    platform: linux/arm64
+    ports: #端口映射
+      - 8607:8607
+    volumes:
+      - /usr/gitea/blogs/docker-compose:/app
+  mogu_admin:
+    image: mogu_admin:latest
+    container_name: mogu_admin
+    restart: always
+    ports:
+      - 8601:8601
+    volumes:
+      - /usr/gitea/blogs/docker-compose:/app
+  #授权服务
+  mogu_web:
+    image: mogu_web:latest
+    container_name: mogu_web
+    restart: always
+    ports:
+      - 8603:8603
+    volumes:
+      - /usr/gitea/blogs/docker-compose:/app
+  mogu_picture:
+    image: mogu_picture:latest
+    container_name: mogu_picture
+    restart: always
+    ports:
+      - 8602:8602
+    volumes:
+      - /usr/gitea/blogs/docker-compose:/app
+  mogu_sms:
+    image: mogu_sms:latest
+    container_name: mogu_sms
+    restart: always
+    ports:
+      - 8604:8604
+    volumes:
+      - /usr/gitea/blogs/docker-compose:/app
